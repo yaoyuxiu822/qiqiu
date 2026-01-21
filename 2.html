@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>安静集气球 V9.1 - 完美平衡版</title>
+    <style>
+        :root {
+            --primary-blue: #00b4db;
+            --sky-gradient: linear-gradient(to bottom, #00b4db 0%, #ceefff 100%);
+            --card-bg: rgba(255, 255, 255, 0.92);
+        }
+
+        body, html {
+            margin: 0; padding: 0; height: 100vh; overflow: hidden;
+            font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif;
+            background: var(--sky-gradient);
+        }
+
+        /* 天空装饰 */
+        .cloud {
+            position: absolute; background: white; border-radius: 100px;
+            opacity: 0.8; filter: blur(10px); z-index: 0;
+            animation: cloud-move linear infinite;
+        }
+        .cloud:nth-child(1) { width: 200px; height: 60px; top: 15%; left: -250px; animation-duration: 65s; }
+        .cloud:nth-child(2) { width: 140px; height: 45px; top: 40%; left: -200px; animation-duration: 48s; animation-delay: -5s; }
+        @keyframes cloud-move {
+            from { transform: translateX(0); }
+            to { transform: translateX(calc(100vw + 300px)); }
+        }
+
+        /* 界面面板 */
+        #header {
+            position: relative; z-index: 100; padding: 25px;
+            display: flex; justify-content: space-between; align-items: flex-start;
+        }
+
+        .center-title {
+            position: absolute; left: 50%; transform: translateX(-50%);
+            top: 25px; font-size: 34px; font-weight: 800; color: #1e3799;
+            text-shadow: 2px 2px 6px rgba(255,255,255,0.8);
+            letter-spacing: 4px; pointer-events: none;
+        }
+
+        .stats-container { display: flex; gap: 12px; }
+        .stat-card {
+            background: var(--card-bg); padding: 12px 20px; border-radius: 18px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.06); text-align: center;
+            min-width: 90px; border: 1px solid white;
+        }
+        .stat-label { font-size: 13px; color: #666; margin-bottom: 4px; }
+        .stat-value { font-size: 24px; font-weight: bold; color: #2c3e50; }
+
+        .controls { display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+        .btn-group { display: flex; gap: 10px; }
+        
+        button {
+            padding: 12px 24px; border-radius: 15px; border: none; font-weight: bold;
+            cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            font-size: 15px;
+        }
+        #start-btn { background: #2ecc71; color: white; }
+        #stop-btn { background: #f39c12; color: white; }
+        #clear-btn { background: #e74c3c; color: white; }
+        button:disabled { background: #bdc3c7; transform: none; box-shadow: none; }
+
+        #party-zone {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 50; pointer-events: none;
+        }
+
+        /* 气球动画 */
+        .balloon-wrapper {
+            position: absolute; width: 100px; height: 130px;
+            pointer-events: auto; will-change: transform;
+            --final-top: 15%;
+            animation: drift-up 12s ease-out forwards;
+        }
+        .balloon-wrapper img {
+            width: 100%; height: 100%; object-fit: contain;
+            filter: drop-shadow(4px 8px 12px rgba(0,0,0,0.15));
+        }
+
+        @keyframes drift-up {
+            0% { top: 110%; transform: translateX(0) rotate(-5deg); }
+            100% { top: var(--final-top); transform: translateX(var(--drift-x)) rotate(5deg); }
+        }
+
+        .floating { animation: hover-float 4s ease-in-out infinite alternate !important; }
+        @keyframes hover-float {
+            from { transform: translate(var(--drift-x), 0) rotate(5deg); }
+            to { transform: translate(var(--drift-x), 15px) rotate(-5deg); }
+        }
+
+        .pop { transform: scale(3) !important; opacity: 0 !important; transition: 0.4s; pointer-events: none; }
+
+        /* 红色警告遮罩 */
+        #flash-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #ff4757; opacity: 0; pointer-events: none; z-index: 999;
+            transition: opacity 0.1s;
+        }
+    </style>
+</head>
+<body>
+
+<div class="cloud"></div>
+<div class="cloud"></div>
+<div id="flash-overlay"></div>
+
+<div id="header">
+    <div class="center-title">安静集气球</div>
+
+    <div class="stats-container">
+        <div class="stat-card">
+            <div class="stat-label">音量</div>
+            <div id="db-val" class="stat-value">0</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">计时</div>
+            <div class="stat-value"><span id="timer-val" style="color:#2ecc71">0</span><small style="font-size:12px;color:#999">/30s</small></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">已收集</div>
+            <div id="count-val" class="stat-value" style="color:#3498db">0</div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <div class="btn-group">
+            <button id="start-btn" onclick="start()">开始集气球</button>
+            <button id="stop-btn" onclick="stop()" disabled>暂停</button>
+            <button id="clear-btn" onclick="clearAll()">一键清空</button>
+        </div>
+        <div style="font-size: 13px; color: #34495e; background: rgba(255,255,255,0.6); padding: 6px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.8);">
+            灵敏度: <input type="range" id="sens" min="-40" max="40" value="0">
+        </div>
+    </div>
+</div>
+
+<div id="party-zone"></div>
+
+<script>
+    let audioContext, analyser, source;
+    let isRunning = false;
+    let smoothedDb = 0;
+    let quietSec = 0;
+    let count = 0;
+    let tInterval, aFrame;
+    
+    // --- 调优参数 ---
+    let noisePersistentFrames = 0; 
+    let lastPopTime = 0;           
+    const POP_COOLDOWN = 4000;     // 爆炸间隔微调为 4 秒
+    const NOISE_THRESHOLD = 70;    // 【关键修改】下调至 70 分贝
+    const REQUIRED_NOISE_SEC = 1.5; // 【关键修改】吵闹持续 1.5 秒即炸，反应更快
+
+    const IMGS = [
+        'images/image_4.png','images/image_5.png','images/image_6.png',
+        'images/image_7.png','images/image_8.png','images/image_9.png',
+        'images/image_10.png','images/image_11.png','images/image_12.png','images/image_13.png'
+    ];
+
+    function playPopSound() {
+        if(!audioContext) return;
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, audioContext.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.15);
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        osc.stop(audioContext.currentTime + 0.15);
+    }
+
+    async function start() {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioContext.createAnalyser();
+            source = audioContext.createMediaStreamSource(stream);
+            source.connect(analyser);
+            
+            isRunning = true;
+            document.getElementById('start-btn').disabled = true;
+            document.getElementById('stop-btn').disabled = false;
+
+            listen();
+            tInterval = setInterval(tick, 1000);
+        } catch(e) { alert("麦克风权限启动失败"); }
+    }
+
+    function stop() {
+        isRunning = false;
+        if(tInterval) clearInterval(tInterval);
+        if(aFrame) cancelAnimationFrame(aFrame);
+        document.getElementById('start-btn').disabled = false;
+        document.getElementById('stop-btn').disabled = true;
+    }
+
+    function clearAll() {
+        document.getElementById('party-zone').innerHTML = '';
+        count = 0; quietSec = 0;
+        document.getElementById('count-val').innerText = "0";
+        document.getElementById('timer-val').innerText = "0";
+    }
+
+    function listen() {
+        if(!isRunning) return;
+        analyser.fftSize = 256;
+        let data = new Uint8Array(analyser.frequencyBinCount);
+        analyser.getByteFrequencyData(data);
+        let sum = 0;
+        for(let i=0; i<data.length; i++) sum += data[i];
+        let avg = sum / data.length;
+
+        // 平滑处理
+        smoothedDb = (smoothedDb * 0.9) + (avg * 0.1);
+        let sensAdjust = parseInt(document.getElementById('sens').value);
+        let final = Math.floor(smoothedDb + sensAdjust);
+        document.getElementById('db-val').innerText = final > 0 ? final : 0;
+
+        // 吵闹逻辑
+        if(final > NOISE_THRESHOLD) {
+            noisePersistentFrames++; 
+            if(noisePersistentFrames > (60 * REQUIRED_NOISE_SEC)) {
+                let now = Date.now();
+                if(now - lastPopTime > POP_COOLDOWN) {
+                    popOne();
+                    lastPopTime = now;
+                }
+                noisePersistentFrames = 0; 
+                quietSec = 0; 
+                document.getElementById('timer-val').innerText = "0";
+            }
+        } else {
+            if(noisePersistentFrames > 0) noisePersistentFrames -= 1; 
+        }
+
+        aFrame = requestAnimationFrame(listen);
+    }
+
+    function tick() {
+        if(!isRunning) return;
+        let db = parseInt(document.getElementById('db-val').innerText);
+        if(db < 40) {
+            quietSec++;
+            document.getElementById('timer-val').innerText = quietSec;
+            if(quietSec >= 30) {
+                createB();
+                quietSec = 0;
+                document.getElementById('timer-val').innerText = "0";
+            }
+        }
+    }
+
+    function createB() {
+        const zone = document.getElementById('party-zone');
+        const b = document.createElement('div');
+        b.className = 'balloon-wrapper';
+        b.style.left = Math.random() * 75 + 10 + '%';
+        let randomTop = Math.floor(Math.random() * 35) + 10; 
+        b.style.setProperty('--final-top', randomTop + '%');
+        let drift = (Math.random() - 0.5) * 120; 
+        b.style.setProperty('--drift-x', drift + 'px');
+
+        const img = document.createElement('img');
+        img.src = IMGS[Math.floor(Math.random() * IMGS.length)];
+        b.appendChild(img);
+        
+        b.addEventListener('animationend', (e) => {
+            if(e.animationName === 'drift-up') {
+                b.style.top = b.style.getPropertyValue('--final-top'); 
+                b.classList.add('floating');
+            }
+        });
+
+        b.onclick = function() {
+            this.classList.add('pop');
+            playPopSound();
+            flashScreen();
+            setTimeout(() => { this.remove(); updateCount(-1); }, 400);
+        };
+
+        zone.appendChild(b);
+        updateCount(1);
+    }
+
+    function updateCount(val) {
+        count += val; if(count < 0) count = 0;
+        document.getElementById('count-val').innerText = count;
+    }
+
+    function flashScreen() {
+        const flash = document.getElementById('flash-overlay');
+        flash.style.opacity = '0.5';
+        setTimeout(() => flash.style.opacity = '0', 200);
+    }
+
+    function popOne() {
+        const bs = document.querySelectorAll('.balloon-wrapper:not(.pop)');
+        if(bs.length > 0) {
+            const target = bs[Math.floor(Math.random() * bs.length)];
+            target.classList.add('pop');
+            playPopSound();
+            flashScreen();
+            setTimeout(() => { target.remove(); updateCount(-1); }, 400);
+        }
+    }
+</script>
+</body>
+</html>
